@@ -126,7 +126,7 @@ export default function ResultsPage() {
   const verdict = results.length === 0
     ? { icon: CheckCircle2, color: 'text-success', bg: 'bg-success/10 border-success/20',
         title: 'No Matches Found',
-        desc: `This image appears to be unique across all sources checked.` }
+        desc: `This image appears to be unique — not found on Google Vision or TinEye.` }
     : hasExact
     ? { icon: XCircle, color: 'text-danger', bg: 'bg-danger/10 border-danger/20',
         title: `${exactCount} Exact Duplicate${exactCount > 1 ? 's' : ''} Found`,
@@ -172,15 +172,13 @@ export default function ResultsPage() {
                 </div>
               )}
               <p className="text-xs text-muted mt-2 truncate">{fileName}</p>
-              <p className="text-xs text-success mt-1">✓ Saved to database</p>
             </div>
 
             <div className="card p-4 space-y-2">
               <p className="text-xs text-muted uppercase tracking-wider font-medium mb-2">Sources Checked</p>
               {[
-                { name: 'Your Database',  count: sources.database || 0, cls: 'text-success'      },
-                { name: 'Google Vision',  count: sources.google   || 0, cls: 'text-blue-400'     },
-                { name: 'TinEye (70B+)',  count: sources.tineye   || 0, cls: 'text-purple-400'   },
+                { name: 'Google Vision', count: sources.google || 0, cls: 'text-blue-400'   },
+                { name: 'TinEye (70B+)', count: sources.tineye || 0, cls: 'text-purple-400' },
               ].map(({ name, count, cls }) => (
                 <div key={name} className="flex justify-between items-center py-1.5 border-b border-border/40 last:border-0">
                   <span className="text-sm text-muted">{name}</span>
@@ -255,7 +253,7 @@ export default function ResultsPage() {
               <div className="card p-12 text-center">
                 <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-4" />
                 <p className="font-semibold text-white text-lg mb-1">Unique Image</p>
-                <p className="text-sm text-muted">No matches found across your database, Google Vision, or TinEye.</p>
+                <p className="text-sm text-muted">No matches found across Google Vision or TinEye.</p>
               </div>
             ) : (
               results.map((r, i) => <ResultCard key={i} result={r} rank={i} />)

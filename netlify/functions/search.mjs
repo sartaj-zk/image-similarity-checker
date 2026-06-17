@@ -362,29 +362,28 @@ export default async function handler(req) {
       throw new Error('Expected multipart/form-data')
     }
 
-    // Run all 3 searches in parallel
-    const [dbResult, googleResult, tineyeResult] = await Promise.allSettled([
-      searchSupabase(fileBuffer),
+    // Compute hash and save image silently to Supabase (no search against DB)
+    const queryHash      = await computePHash(fileBuffer)
+    const uniqueFilename = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+
+    // Save silently — don't await, don't block search, don't surface errors to user
+    uploadToStorage(uniqueFilename, fileBuffer, mimeType)
+      .then(fileUrl => saveImageRecord(uniqueFilename, queryHash, fileUrl))
+      .catch(err => console.error('[storage save]', err))
+
+    // Run Google Vision + TinEye in parallel
+    const [googleResult, tineyeResult] = await Promise.allSettled([
       searchGoogleVision(fileBuffer),
       searchTinEye(fileBuffer),
     ])
 
-    if (dbResult.status === 'rejected')
-      throw new Error(dbResult.reason?.message || 'Database search failed')
+    const googleMatches   = googleResult.status === 'fulfilled' ? googleResult.value.matches         : []
+    const entities        = googleResult.status === 'fulfilled' ? googleResult.value.entities        : []
+    const bestGuessLabels = googleResult.status === 'fulfilled' ? googleResult.value.bestGuessLabels : []
+    const tineyeMatches   = tineyeResult.status === 'fulfilled' ? tineyeResult.value                 : []
 
-    const { matches: dbMatches, queryHash, existingImages } = dbResult.value
-    const googleMatches   = googleResult.status  === 'fulfilled' ? googleResult.value.matches        : []
-    const entities        = googleResult.status  === 'fulfilled' ? googleResult.value.entities       : []
-    const bestGuessLabels = googleResult.status  === 'fulfilled' ? googleResult.value.bestGuessLabels: []
-    const tineyeMatches   = tineyeResult.status  === 'fulfilled' ? tineyeResult.value                : []
-
-    // Save image to Supabase
-    const uniqueFilename = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-    const fileUrl        = await uploadToStorage(uniqueFilename, fileBuffer, mimeType)
-    await saveImageRecord(uniqueFilename, queryHash, fileUrl)
-
-    // Merge all results and deduplicate by URL
-    const allMatches = [...dbMatches, ...tineyeMatches, ...googleMatches]
+    // Merge and deduplicate by URL
+    const allMatches = [...tineyeMatches, ...googleMatches]
       .sort((a, b) => b.similarity_pct - a.similarity_pct)
 
     const seen = new Set()
@@ -396,17 +395,15 @@ export default async function handler(req) {
     })
 
     return new Response(JSON.stringify({
-      message:          'Search complete',
-      query_filename:   fileName,
-      total_in_database: existingImages.length,
-      matches_found:    results.length,
+      message:        'Search complete',
+      query_filename: fileName,
+      matches_found:  results.length,
       results,
       entities,
       bestGuessLabels,
       sources: {
-        database: dbMatches.length,
-        google:   googleMatches.length,
-        tineye:   tineyeMatches.length,
+        google: googleMatches.length,
+        tineye: tineyeMatches.length,
       },
     }), { status: 200, headers: cors() })
 
